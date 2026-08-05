@@ -30,6 +30,7 @@ function App() {
   const [libraryMessage, setLibraryMessage] = useState('')
   const [chatMessages, setChatMessages] = useState([])
   const [isChatLoading, setIsChatLoading] = useState(false)
+  const [htmlPreview, setHtmlPreview] = useState(null)
   const [exploreButtonColor, setExploreButtonColor] = useState('#7562e8')
   const [landingHeroImage, setLandingHeroImage] = useState(null)
   const audioPlayer = useRef(null)
@@ -89,7 +90,10 @@ function App() {
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Unable to contact the assistant.')
-      setChatMessages((current) => [...current, { role: 'assistant', content: payload.reply }])
+      const previewAction = payload.action?.type === 'preview_html' && typeof payload.action.html === 'string' && payload.action.html.trim()
+        ? { title: typeof payload.action.title === 'string' ? payload.action.title : 'Generated page preview', html: payload.action.html }
+        : null
+      setChatMessages((current) => [...current, { role: 'assistant', content: payload.reply, previewAction }])
       if (payload.action?.type === 'set_explore_button_color' && /^#[0-9a-f]{6}$/i.test(payload.action.color)) {
         setExploreButtonColor(payload.action.color)
       }
@@ -111,9 +115,21 @@ function App() {
       {file.type === 'Image' && file.source ? <img className="image-thumb" src={file.source} alt="" /> : <div className={`file-icon ${file.type.toLowerCase()}`}>{file.type.charAt(0)}</div>}
       <div className="file-details"><h3>{file.name}</h3><p>{file.type} - {file.detail}</p></div>
       <div className="card-actions">{file.type === 'Video' && <button className="icon-button" type="button" disabled={!file.source} onClick={() => setViewingVideo(file)} aria-label={`View ${file.name}`}><Icon name="view" /></button>}{file.type === 'Audio' && <button className="icon-button" type="button" disabled={!file.source} onClick={() => toggleAudio(file)} aria-label={playingFile === file.id ? `Stop ${file.name}` : `Play ${file.name}`}><Icon name={playingFile === file.id ? 'stop' : 'play'} /></button>}<button className="icon-button delete-button" type="button" onClick={() => deleteFile(file)} aria-label={`Delete ${file.name}`}><Icon name="trash" /></button></div>
-    </article>) : <p className="empty-state">No {activeMediaTab.toLowerCase()} files yet.</p>}</div><label className="import-button"><input type="file" accept="image/*,video/*,audio/*" multiple onChange={handleImport} /><span>+</span> Import media<small>Images, videos and audio files</small></label><div className="library-message"><label htmlFor="library-message">Ask Kaojai.ai</label>{chatMessages.length > 0 && <div className="chat-history" aria-live="polite">{chatMessages.map((chat, index) => <p className={`chat-bubble ${chat.role}`} key={`${chat.role}-${index}`}>{chat.content}</p>)}{isChatLoading && <p className="chat-bubble assistant">Thinking...</p>}</div>}<textarea id="library-message" rows="3" value={libraryMessage} onChange={(event) => setLibraryMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage() } }} placeholder="Ask about your stay..." /><button type="button" disabled={!libraryMessage.trim() || isChatLoading} onClick={sendChatMessage}>{isChatLoading ? 'Sending...' : 'Send'}</button></div></section></aside>
+    </article>) : <p className="empty-state">No {activeMediaTab.toLowerCase()} files yet.</p>}</div><label className="import-button"><input type="file" accept="image/*,video/*,audio/*" multiple onChange={handleImport} /><span>+</span> Import media<small>Images, videos and audio files</small></label><div className="library-message"><label htmlFor="library-message">Ask Kaojai.ai</label>{chatMessages.length > 0 && <div className="chat-history" aria-live="polite">{chatMessages.map((chat, index) => <div className={`chat-entry ${chat.role}`} key={`${chat.role}-${index}`}><p className={`chat-bubble ${chat.role}`}>{chat.content}</p>{chat.previewAction && <button className="preview-button" type="button" onClick={() => setHtmlPreview({ title: chat.previewAction.title, html: createSafePreviewDocument(chat.previewAction.html) })}>Preview page</button>}</div>)}{isChatLoading && <p className="chat-bubble assistant">Thinking...</p>}</div>}<textarea id="library-message" rows="3" value={libraryMessage} onChange={(event) => setLibraryMessage(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage() } }} placeholder="Ask about your stay..." /><button type="button" disabled={!libraryMessage.trim() || isChatLoading} onClick={sendChatMessage}>{isChatLoading ? 'Sending...' : 'Send'}</button></div></section></aside>
     {viewingVideo && <div className="video-modal" role="dialog" aria-modal="true" aria-label="Video preview" onClick={() => setViewingVideo(null)}><section onClick={(event) => event.stopPropagation()}><button className="modal-close" type="button" onClick={() => setViewingVideo(null)} aria-label="Close video preview"><Icon name="close" /></button><h2>{viewingVideo.name}</h2><video src={viewingVideo.source} controls autoPlay /></section></div>}
+    {htmlPreview && <div className="html-preview-modal" role="dialog" aria-modal="true" aria-label={htmlPreview.title} onClick={() => setHtmlPreview(null)}><section onClick={(event) => event.stopPropagation()}><header><div><p>Engine-generated HTML</p><h2>{htmlPreview.title}</h2></div><button className="modal-close" type="button" onClick={() => setHtmlPreview(null)} aria-label="Close generated page preview"><Icon name="close" /></button></header><iframe title={htmlPreview.title} sandbox="" srcDoc={htmlPreview.html} /></section></div>}
   </div>
 }
 
 export default App
+
+// The response remains isolated from the React application: no scripts, forms,
+// popups, or same-origin access are allowed by the empty iframe sandbox.
+function createSafePreviewDocument(html) {
+  const csp = "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src https: data:"
+  const content = html.trim().slice(0, 100000)
+  if (/<!doctype|<html[\s>]/i.test(content)) {
+    return content.replace(/<head(\s[^>]*)?>/i, (head) => `${head}<meta http-equiv="Content-Security-Policy" content="${csp}">`)
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{margin:0;padding:24px;font-family:Inter,system-ui,sans-serif;color:#123b43;background:#fff}*{box-sizing:border-box}</style></head><body>${content}</body></html>`
+}

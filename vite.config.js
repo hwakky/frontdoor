@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const SYSTEM_PROMPT = `You are Kaojai.ai's helpful AI assistant. Answer in Thai unless the user asks for another language. Help with travel, hotel bookings, and using this app. Be concise and accurate. If the user asks to change the color of the \"Explore destinations\" button, set action.type to \"set_explore_button_color\" and action.color to a CSS hex color. If the user asks to place an imported image on the Landing page, only choose an exact filename from the available imported images and set action.type to \"set_landing_hero_image\" with that filename. For every other request, set action.type to \"none\".`
+const SYSTEM_PROMPT = `You are Kaojai.ai's helpful AI assistant. Answer in Thai unless the user asks for another language. Help with travel, hotel bookings, and using this app. Be concise and accurate. If the user asks to change the color of the \"Explore destinations\" button, set action.type to \"set_explore_button_color\" and action.color to a CSS hex color. If the user asks to place an imported image on the Landing page, only choose an exact filename from the available imported images and set action.type to \"set_landing_hero_image\" with that filename. If the user asks to create, generate, design, or make a page, screen, form, dashboard, or UI, set action.type to \"preview_html\". Put a self-contained HTML document in action.html with inline CSS. Make it visually complete and responsive. Do not include JavaScript, external scripts, iframes, forms that submit, or external URLs. Set action.title to a short Thai title for the preview. IMPORTANT: when the request explicitly lists form fields, that list is exhaustive. Generate exactly those input fields and no other input, select, textarea, checkbox, radio, or date field. Do not add common registration fields such as phone, confirm password, name, or consent unless the user explicitly asks for them. The reply must also mention only the requested fields. For every other request, set action.type to \"none\".`
 
 const CHAT_RESPONSE_FORMAT = {
   type: 'json_schema',
@@ -16,11 +16,13 @@ const CHAT_RESPONSE_FORMAT = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          type: { type: 'string', enum: ['none', 'set_explore_button_color', 'set_landing_hero_image'] },
+          type: { type: 'string', enum: ['none', 'set_explore_button_color', 'set_landing_hero_image', 'preview_html'] },
           color: { type: 'string' },
           fileName: { type: 'string' },
+          title: { type: 'string' },
+          html: { type: 'string' },
         },
-        required: ['type', 'color', 'fileName'],
+        required: ['type', 'color', 'fileName', 'title', 'html'],
       },
     },
     required: ['reply', 'action'],
